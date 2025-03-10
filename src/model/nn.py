@@ -106,7 +106,8 @@ class NN(object, metaclass=abc.ABCMeta):
         return loss
 
     def fit(self, x, y, epochs=2000, x_test=None, y_test=None, optimizer='adam', learning_rate=0.1,
-            load_best_weights=False, val_freq=1000, log_freq=1000, verbose=1):
+            load_best_weights=False, val_freq=1000, log_freq=1000, verbose=1, 
+            early_stopping=True, patience=50, min_delta=1e-4):
         """
         Performs the neural network training phase.
 
@@ -119,6 +120,9 @@ class NN(object, metaclass=abc.ABCMeta):
         :param bool load_best_weights: flag to determine if the best weights corresponding to the best
         accuracy are loaded after training
         """
+
+        if early_stopping:
+            self.init_early_stopping(patience=patience, min_delta=min_delta)
 
         x = self.tensor(x)
         y = self.tensor(y)
@@ -153,11 +157,13 @@ class NN(object, metaclass=abc.ABCMeta):
 
         for epoch in range(1, epochs + 1):
             loss = self.train_step(x, y)
-            # Track progress
-            epoch_loss.update_state(loss)  # Add current batch loss
+            epoch_loss.update_state(loss)
 
-            self.epoch_callback(epoch, epoch_loss.result(), epochs, x_test, y_test, val_freq, log_freq,
+            should_stop = self.epoch_callback(epoch, epoch_loss.result(), epochs, x_test, y_test, val_freq, log_freq,
                                 verbose)
+            if should_stop:
+                logging.info(f'Early stopping triggered at epoch {epoch}')
+                break
 
     def train_lbfgs(self, x, y, epochs=2000, x_test=None, y_test=None, learning_rate=1.0, val_freq=1000, log_freq=1000,
                     verbose=1):
@@ -175,9 +181,13 @@ class NN(object, metaclass=abc.ABCMeta):
         if verbose:
             logging.info(f'Start L-BFGS optimization')
 
+        def callback(epoch, epoch_loss, epochs, x_test, y_test, val_freq=1000, log_freq=1000, verbose=1):
+            should_stop = self.epoch_callback(epoch, epoch_loss, epochs, x_test, y_test, val_freq, log_freq, verbose)
+            return should_stop
+
         optimizer = LBFGS()
         optimizer.minimize(
-            self.model, self.loss_object, x, y, self.epoch_callback, epochs, x_test=x_test, y_test=y_test,
+            self.model, self.loss_object, x, y, callback, epochs, x_test=x_test, y_test=y_test,
             val_freq=val_freq, log_freq=log_freq, verbose=verbose, learning_rate=learning_rate)
 
     def predict(self, x):
@@ -285,6 +295,37 @@ class NN(object, metaclass=abc.ABCMeta):
         """
 
         return datetime.timedelta(seconds=int(time.time() - self.start_time))
+    
+    # Add this after __init__ method
+    def init_early_stopping(self, patience=50, min_delta=1e-4):
+        """
+        Initialize early stopping parameters.
+
+        :param int patience: number of epochs to wait before early stopping
+        :param float min_delta: minimum change in monitored value to qualify as an improvement
+        """
+        self.early_stop_patience = patience
+        self.early_stop_min_delta = min_delta
+        self.early_stop_counter = 0
+        self.best_loss = float('inf')
+        self.should_stop = False
+
+    def check_early_stopping(self, current_loss):
+        """
+        Check if training should stop based on validation loss.
+
+        :param float current_loss: current validation loss
+        :return: bool: True if training should stop
+        """
+        if (self.best_loss - current_loss) > self.early_stop_min_delta:
+            self.best_loss = current_loss
+            self.early_stop_counter = 0
+        else:
+            self.early_stop_counter += 1
+            if self.early_stop_counter >= self.early_stop_patience:
+                self.should_stop = True
+                return True
+        return False
 
     def epoch_callback(self, epoch, epoch_loss, epochs, x_val=None, y_val=None, val_freq=1000, log_freq=1000,
                        verbose=1):
@@ -305,18 +346,31 @@ class NN(object, metaclass=abc.ABCMeta):
         elapsed_time = self.get_elapsed_time()
         self.train_time_results[epoch] = elapsed_time
 
+
+        if x_val is not None and y_val is not None:
+            [mean_squared_error, errors, Y_pred] = self.evaluate(x_val, y_val)
+            self.train_accuracy_results[epoch] = mean_squared_error
+            self.train_pred_results[epoch] = Y_pred
+            # log_str += f',\tAccuracy (MSE): {mean_squared_error:.4e}'
+
+            
+            if mean_squared_error <= min(self.train_accuracy_results.values()):
+                self.save_weights(os.path.join(self.checkpoints_dir, 'easy_checkpoint'))
+
+        # Add early stopping check
+        if hasattr(self, 'early_stop_patience'):
+            if self.check_early_stopping(mean_squared_error):
+                if verbose:
+                    logging.info(f'Early stopping triggered at epoch {epoch},\tLoss: {epoch_loss:.4e},\tAccuracy (MSE): {mean_squared_error:.4e}')
+                return True
+
         if epoch % val_freq == 0 or epoch == 1:
             length = len(str(epochs))
             log_str = f'\tEpoch: {str(epoch).zfill(length)}/{epochs},\t' \
                       f'Loss: {epoch_loss:.4e}'
+            
+            log_str += f',\tAccuracy (MSE): {mean_squared_error:.4e}'
 
-            if x_val is not None and y_val is not None:
-                [mean_squared_error, errors, Y_pred] = self.evaluate(x_val, y_val)
-                self.train_accuracy_results[epoch] = mean_squared_error
-                self.train_pred_results[epoch] = Y_pred
-                log_str += f',\tAccuracy (MSE): {mean_squared_error:.4e}'
-                if mean_squared_error <= min(self.train_accuracy_results.values()):
-                    self.save_weights(os.path.join(self.checkpoints_dir, 'easy_checkpoint'))
 
             if (epoch % log_freq == 0 or epoch == 1) and verbose == 1:
                 log_str += f',\t Elapsed time: {elapsed_time} (+{self.get_epoch_duration()})'
@@ -324,6 +378,8 @@ class NN(object, metaclass=abc.ABCMeta):
 
         if epoch == epochs and x_val is None and y_val is None:
             self.save_weights(os.path.join(self.checkpoints_dir, 'easy_checkpoint'))
+            
+        return self.should_stop if hasattr(self, 'should_stop') else False
 
     def evaluate(self, x_val, y_val, metric='MSE'):
         """

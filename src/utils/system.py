@@ -2,14 +2,6 @@ import tensorflow as tf
 
 from scipy.constants import g
 
-# 物理参数
-m1 = 0.5  # 第一连杆质量
-m2 = 0.5  # 第二连杆质量
-l1 = 0.18  # 第一连杆长度
-l2 = 0.5586  # 第二连杆长度
-lc1 = l1/2  # 第一连杆质心位置
-lc2 = l2/2  # 第二连杆质心位置
-
 @tf.function
 def f(t, x, u):
     M_tf = M(x[1], i_PR90=161.0)
@@ -20,19 +12,8 @@ def f(t, x, u):
     dx12dt = x[2:]
 
     with tf.device('/CPU:0'):
-        # 执行线性求解或其他操作
-        # result = tf.linalg.solve(M, B)  # 你的实际计算
+        # result = tf.linalg.solve(M, B)  
         dx34dt = tf.linalg.solve(M_tf, tf.expand_dims(-k_tf + q_tf + tf.linalg.matvec(B_tf, u), 1))[:, 0]
-
-    
-    # 方法1：使用矩阵伪逆（最稳定的方法）
-    # M_inv = tf.linalg.pinv(M_tf)
-    # rhs = tf.expand_dims(-k_tf + q_tf + tf.linalg.matvec(B_tf, u), 1)
-    # dx34dt = tf.matmul(M_inv, rhs)[:, 0]
-    
-    # 或者方法2：使用QR分解
-    # q_mat, r_mat = tf.linalg.qr(M_tf)
-    # dx34dt = tf.linalg.triangular_solve(r_mat, tf.matmul(q_mat, tf.expand_dims(-k_tf + q_tf + tf.linalg.matvec(B_tf, u), 1), transpose_a=True))[:, 0]
 
     dxdt = tf.concat((dx12dt, dx34dt), 0)
 
@@ -58,70 +39,51 @@ def M(beta, i_PR90=161.):
     return M_tf
 
 
-# def k(dalpha_dt, beta, dbeta_dt):
-#     """
-#     Returns stiffness vector of the robot for a set of generalized coordinates.
-
-#     :param tf.Tensor dalpha_dt: tensor from values of the first derivation of alpha
-#     :param tf.Tensor beta: tensor from beta values
-#     :param tf.Tensor dbeta_dt: tensor from values of the first derivation of beta
-#     :return: tf.Tensor: stiffness vector of the robot
-#     """
-
-#     return tf.stack([0.040968 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.5586) - 0.18 * tf.sin(beta) *
-#                      (1.714 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
-#                       (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
-#                       (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
-#                       (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.30852 *
-#                       dalpha_dt ** 2 * tf.cos(beta) + 1.714 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
-#                       (dalpha_dt + dbeta_dt) + 1.714 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
-#                       (dalpha_dt + dbeta_dt)) -
-#                      0.36 * tf.sin(beta) *
-#                      (0.1138 * (0.06415 * dalpha_dt + 0.06415 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.1138 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.1138 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.1138 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.1138 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.020484 * dalpha_dt ** 2 * tf.cos(beta) + 0.1138 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
-#                       (dalpha_dt + dbeta_dt) + 0.1138 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
-#                       (dalpha_dt + dbeta_dt) + 0.1138 * (0.03 * dalpha_dt + 0.03 * dbeta_dt) * (dalpha_dt + dbeta_dt)) -
-#                      0.18 * tf.sin(beta) *
-#                      (2.751 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.49518 *
-#                       dalpha_dt ** 2 * tf.cos(beta)) - 0.18 * tf.sin(beta) *
-#                      (1.531 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.531 *
-#                       (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.27558 * dalpha_dt ** 2 *
-#                       tf.cos(beta) + 1.531 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) * (dalpha_dt + dbeta_dt)) -
-#                      0.18 * tf.sin(beta) *
-#                      (0.934 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.934 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.934 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-#                       0.16812 * dalpha_dt ** 2 * tf.cos(beta) + 0.934 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
-#                       (dalpha_dt + dbeta_dt)) +
-#                      0.16812 * dalpha_dt ** 2 * tf.sin(beta) * (
-#                              0.18 * tf.cos(beta) + 0.335) + 0.49518 * dalpha_dt ** 2 *
-#                      tf.sin(beta) * (0.18 * tf.cos(beta) + 0.04321) + 0.30852 * dalpha_dt ** 2 * tf.sin(beta) *
-#                      (0.18 * tf.cos(beta) + 0.46445) + 0.27558 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta)
-#                                                                                                   + 0.24262),
-#                      0.3107549862 * dalpha_dt ** 2 * tf.sin(beta)], axis=0)
-
 def k(dalpha_dt, beta, dbeta_dt):
     """
-    Returns stiffness vector (Coriolis and centrifugal forces) of the robot
+    Returns stiffness vector of the robot for a set of generalized coordinates.
+
+    :param tf.Tensor dalpha_dt: tensor from values of the first derivation of alpha
+    :param tf.Tensor beta: tensor from beta values
+    :param tf.Tensor dbeta_dt: tensor from values of the first derivation of beta
+    :return: tf.Tensor: stiffness vector of the robot
     """
-    # 科氏力项
-    c11 = -2 * m2 * l1 * lc2 * tf.sin(beta) * dbeta_dt
-    c12 = -m2 * l1 * lc2 * tf.sin(beta) * dbeta_dt
-    c21 = m2 * l1 * lc2 * tf.sin(beta) * dalpha_dt
-    c22 = 0
 
-    # 离心力项
-    h1 = -m2 * l1 * lc2 * tf.sin(beta) * (dalpha_dt + dbeta_dt)**2
-    h2 = 0
-
-    k1 = c11*dalpha_dt + c12*dbeta_dt + h1
-    k2 = c21*dalpha_dt + c22*dbeta_dt + h2
-
-    return tf.stack([k1, k2], axis=0)
+    return tf.stack([0.040968 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.5586) - 0.18 * tf.sin(beta) *
+                     (1.714 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
+                      (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
+                      (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
+                      (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.30852 *
+                      dalpha_dt ** 2 * tf.cos(beta) + 1.714 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt) + 1.714 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt)) -
+                     0.36 * tf.sin(beta) *
+                     (0.1138 * (0.06415 * dalpha_dt + 0.06415 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.020484 * dalpha_dt ** 2 * tf.cos(beta) + 0.1138 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt) + 0.1138 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt) + 0.1138 * (0.03 * dalpha_dt + 0.03 * dbeta_dt) * (dalpha_dt + dbeta_dt)) -
+                     0.18 * tf.sin(beta) *
+                     (2.751 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.49518 *
+                      dalpha_dt ** 2 * tf.cos(beta)) - 0.18 * tf.sin(beta) *
+                     (1.531 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.531 *
+                      (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.27558 * dalpha_dt ** 2 *
+                      tf.cos(beta) + 1.531 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) * (dalpha_dt + dbeta_dt)) -
+                     0.18 * tf.sin(beta) *
+                     (0.934 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.934 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.934 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.16812 * dalpha_dt ** 2 * tf.cos(beta) + 0.934 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt)) +
+                     0.16812 * dalpha_dt ** 2 * tf.sin(beta) * (
+                             0.18 * tf.cos(beta) + 0.335) + 0.49518 * dalpha_dt ** 2 *
+                     tf.sin(beta) * (0.18 * tf.cos(beta) + 0.04321) + 0.30852 * dalpha_dt ** 2 * tf.sin(beta) *
+                     (0.18 * tf.cos(beta) + 0.46445) + 0.27558 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta)
+                                                                                                  + 0.24262),
+                     0.3107549862 * dalpha_dt ** 2 * tf.sin(beta)], axis=0)
 
 
 def q(alpha, dalpha_dt, beta, dbeta_dt):
@@ -194,74 +156,54 @@ def M_tensor(beta, i_PR90):
 
 
 
-# def k_tensor(dalpha_dt, beta, dbeta_dt):
-#     """
-#     Returns stiffness vectors of the robot for multiple values of generalized coordinates.
-
-#     :param tf.Tensor dalpha_dt: tensor from values of the first derivation of alpha
-#     :param tf.Tensor beta: tensor from beta values
-#     :param tf.Tensor dbeta_dt: tensor from values of the first derivation of beta
-#     :return: tf.Tensor: stiffness vectors of the robot
-#     """
-
-    # return tf.stack([0.040968 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.5586) 
-    #                  - 0.18 * tf.sin(beta) *
-    #                  (1.714 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
-    #                   (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
-    #                   (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
-    #                   (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.30852 *
-    #                   dalpha_dt ** 2 * tf.cos(beta) + 1.714 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
-    #                   (dalpha_dt + dbeta_dt) + 1.714 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
-    #                   (dalpha_dt + dbeta_dt)) 
-    #                   - 0.36 * tf.sin(beta) *
-    #                  (0.1138 * (0.06415 * dalpha_dt + 0.06415 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.1138 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.1138 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.1138 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.1138 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.020484 * dalpha_dt ** 2 * tf.cos(beta) + 0.1138 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
-    #                   (dalpha_dt + dbeta_dt) + 0.1138 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
-    #                   (dalpha_dt + dbeta_dt) + 0.1138 * (0.03 * dalpha_dt + 0.03 * dbeta_dt) * (dalpha_dt + dbeta_dt)) 
-    #                   - 0.18 * tf.sin(beta) *
-    #                  (2.751 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.49518 *
-    #                   dalpha_dt ** 2 * tf.cos(beta)) 
-    #                   - 0.18 * tf.sin(beta) *
-    #                  (1.531 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.531 *
-    #                   (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.27558 * dalpha_dt ** 2 *
-    #                   tf.cos(beta) + 1.531 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) * (dalpha_dt + dbeta_dt)) 
-    #                   - 0.18 * tf.sin(beta) *
-    #                  (0.934 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.934 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.934 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
-    #                   0.16812 * dalpha_dt ** 2 * tf.cos(beta) + 0.934 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
-    #                   (dalpha_dt + dbeta_dt)) 
-    #                   + 0.16812 * dalpha_dt ** 2 * tf.sin(beta) * (
-    #                          0.18 * tf.cos(beta) + 0.335) 
-    #                   + 0.49518 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.04321) 
-    #                   + 0.30852 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.46445) 
-    #                   + 0.27558 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.24262),
-
-    #                   0.3107549862 * dalpha_dt ** 2 * tf.sin(beta)], axis=1)
-
 def k_tensor(dalpha_dt, beta, dbeta_dt):
     """
-    Returns stiffness vector (Coriolis and centrifugal forces) of the robot
+    Returns stiffness vectors of the robot for multiple values of generalized coordinates.
+
+    :param tf.Tensor dalpha_dt: tensor from values of the first derivation of alpha
+    :param tf.Tensor beta: tensor from beta values
+    :param tf.Tensor dbeta_dt: tensor from values of the first derivation of beta
+    :return: tf.Tensor: stiffness vectors of the robot
     """
-    # 科氏力项
-    c11 = -2 * m2 * l1 * lc2 * tf.sin(beta) * dbeta_dt
-    c12 = -m2 * l1 * lc2 * tf.sin(beta) * dbeta_dt
-    c21 = m2 * l1 * lc2 * tf.sin(beta) * dalpha_dt
-    c22 = 0
 
-    # 离心力项
-    h1 = -m2 * l1 * lc2 * tf.sin(beta) * (dalpha_dt + dbeta_dt)**2
-    h2 = 0
+    return tf.stack([0.040968 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.5586) 
+                     - 0.18 * tf.sin(beta) *
+                     (1.714 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
+                      (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
+                      (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.714 *
+                      (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.30852 *
+                      dalpha_dt ** 2 * tf.cos(beta) + 1.714 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt) + 1.714 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt)) 
+                      - 0.36 * tf.sin(beta) *
+                     (0.1138 * (0.06415 * dalpha_dt + 0.06415 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.07205 * dalpha_dt + 0.07205 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.1138 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.020484 * dalpha_dt ** 2 * tf.cos(beta) + 0.1138 * (0.0574 * dalpha_dt + 0.0574 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt) + 0.1138 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt) + 0.1138 * (0.03 * dalpha_dt + 0.03 * dbeta_dt) * (dalpha_dt + dbeta_dt)) 
+                      - 0.18 * tf.sin(beta) *
+                     (2.751 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.49518 *
+                      dalpha_dt ** 2 * tf.cos(beta)) 
+                      - 0.18 * tf.sin(beta) *
+                     (1.531 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 1.531 *
+                      (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) + 0.27558 * dalpha_dt ** 2 *
+                      tf.cos(beta) + 1.531 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) * (dalpha_dt + dbeta_dt)) 
+                      - 0.18 * tf.sin(beta) *
+                     (0.934 * (0.08262 * dalpha_dt + 0.08262 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.934 * (0.04321 * dalpha_dt + 0.04321 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.934 * (0.09238 * dalpha_dt + 0.09238 * dbeta_dt) * (dalpha_dt + dbeta_dt) +
+                      0.16812 * dalpha_dt ** 2 * tf.cos(beta) + 0.934 * (0.11679 * dalpha_dt + 0.11679 * dbeta_dt) *
+                      (dalpha_dt + dbeta_dt)) 
+                      + 0.16812 * dalpha_dt ** 2 * tf.sin(beta) * (
+                             0.18 * tf.cos(beta) + 0.335) 
+                      + 0.49518 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.04321) 
+                      + 0.30852 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.46445) 
+                      + 0.27558 * dalpha_dt ** 2 * tf.sin(beta) * (0.18 * tf.cos(beta) + 0.24262),
 
-    k1 = c11*dalpha_dt + c12*dbeta_dt + h1
-    k2 = c21*dalpha_dt + c22*dbeta_dt + h2
-
-    return tf.stack([k1, k2], axis=1)
-
+                      0.3107549862 * dalpha_dt ** 2 * tf.sin(beta)], axis=1)
 
 def q_tensor(alpha, dalpha_dt, beta, dbeta_dt):
     """

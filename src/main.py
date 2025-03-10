@@ -38,7 +38,8 @@ if __name__ == "__main__":
     data_path = os.path.join(resources_path, 'data.npz')
     weights_path = os.path.join('./resources/weights')
 
-    lb, ub, input_dim, output_dim, _, _, _, _ = load_data(data_path)
+    # lb, ub, input_dim, output_dim, _, _, _, _ = load_data(data_path)
+    lb, ub, input_dim, output_dim, X_test, Y_test, X_star, Y_star = load_data(data_path)
 
     # Hyper parameter
     N_l = 4
