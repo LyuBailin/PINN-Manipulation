@@ -61,7 +61,7 @@ class ManipulatorInformedNN(PINN):
             x0 = self.tensor(X_f[:, 1:5])
             u = self.tensor(X_f[:, 5:7])
 
-        i_PR90 = tf.ones(len(t), dtype=tf.float64) * 161
+        i_PR90 = tf.ones(len(t), dtype=tf.float64) * 169
 
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(t)
@@ -82,19 +82,19 @@ class ManipulatorInformedNN(PINN):
         d2q_dt_tf = tf.stack([d2q1_dt_tf, d2q2_dt_tf], axis=1)
 
         M_tf = M_tensor(q2[:, 0], i_PR90)
-        k_tf = k_tensor(dq1_dt_tf, q2[:, 0], dq2_dt_tf)
+        k_tf = k_tensor(dq1_dt_tf, q2[:, 0], dq2_dt_tf, i_PR90)
         q_tf = q_tensor(q1[:, 0], dq1_dt_tf, q2[:, 0], dq2_dt_tf)
         B_tf = B_tensor(i_PR90)
 
         f_pred = tf.concat([dq_dt_tf - dq_dt[:, :, 0],
-                            tf.linalg.matvec(M_tf, d2q_dt_tf) + k_tf - q_tf - tf.linalg.matvec(B_tf, u)], axis=1)
+                            tf.linalg.matvec(M_tf, d2q_dt_tf) - k_tf - q_tf - tf.linalg.matvec(B_tf, u)], axis=1)
 
         return f_pred
 
 
 if __name__ == "__main__":
-    LOAD_WEIGHTS = True
-    TRAIN_NET = False
+    LOAD_WEIGHTS = False
+    TRAIN_NET = True
 
     logging.getLogger().setLevel(logging.INFO)
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
     # Hyper parameter
     N_train = 2
-    epochs = 500000
+    epochs = 200000
     N_phys = 20000
     N_data = 100
 
@@ -118,8 +118,9 @@ if __name__ == "__main__":
 
     lb, ub, input_dim, output_dim, X_test, Y_test, X_star, Y_star = load_data(data_path)
 
+
     # 添加可视化调用
-    visualize_loaded_data(lb, ub, X_test, Y_test, X_star, Y_star, input_dim, output_dim)
+    # visualize_loaded_data(lb, ub, X_test, Y_test, X_star, Y_star, input_dim, output_dim)
 
     N_layer = 4
     N_neurons = 64
@@ -127,6 +128,7 @@ if __name__ == "__main__":
 
     # PINN initialization
     pinn = ManipulatorInformedNN(layers, lb, ub)
+    pinn.init_early_stopping(patience=50, min_delta=1e-4)  # 设置早停参数
 
     if LOAD_WEIGHTS:
         pinn.load_weights(weights_path)
@@ -140,7 +142,11 @@ if __name__ == "__main__":
             pinn.set_collocation_points(X_phys)
             logging.info(f'\t{i + 1}/{N_train} Start training of the PINN')
             start_time = time.time()
-            pinn.fit(X_data, Y_data, epochs, X_star, Y_star, optimizer='lbfgs', learning_rate=1,
+            if i == 0:
+                pinn.fit(X_data, Y_data, 2000, X_star, Y_star, optimizer='adam', learning_rate=1e-3,
+                     val_freq=1000, log_freq=1000)
+            else:
+                pinn.fit(X_data, Y_data, epochs, X_star, Y_star, optimizer='lbfgs', learning_rate=1,
                      val_freq=1000, log_freq=1000)
 
     # PINN Evaluation
@@ -156,5 +162,5 @@ if __name__ == "__main__":
 
     animate(Y_test[::10], [Y_pred[::10]], ['PINN'], fps=1 / (10 * t_step))
 
-    if click.confirm('Do you want to save (overwrite) the models weights?'):
-        pinn.save_weights(os.path.join(weights_path, 'easy_checkpoint'))
+    # if click.confirm('Do you want to save (overwrite) the models weights?'):
+    pinn.save_weights(os.path.join(weights_path, 'easy_checkpoint'))
