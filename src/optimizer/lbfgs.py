@@ -69,15 +69,34 @@ def function_factory(model, loss_fcn, x, y, callback_fcn, epochs, x_test=None, y
 
         return loss_value, grads
 
-    def f(weights):
-        """
-        Function that can be used in the L-BFGS implementation.
-        This function is created by function_factory.
+    # def f(weights):
+    #     """
+    #     Function that can be used in the L-BFGS implementation.
+    #     This function is created by function_factory.
 
-        :param tf.Tensor weights: representing the model's weights
-        :return: tf.Tensor loss_value: current loss value, tf.Tensor grads: gradients w.r.t. the weights
-        """
-        loss_value, grads = train_step(weights)
+    #     :param tf.Tensor weights: representing the model's weights
+    #     :return: tf.Tensor loss_value: current loss value, tf.Tensor grads: gradients w.r.t. the weights
+    #     """
+    #     loss_value, grads = train_step(weights)
+
+    #     # print out iteration & loss
+    #     f.iter += 1
+    #     callback_fcn(f.iter, loss_value, epochs, x_test, y_test, val_freq=val_freq, log_freq=log_freq, verbose=verbose)
+
+    #     # store loss value so we can retrieve later
+    #     tf.py_function(f.history.append, inp=[loss_value], Tout=[])
+
+    #     return loss_value, grads
+    
+        def f(weights):
+            """
+            Function that can be used in the L-BFGS implementation.
+            This function is created by function_factory.
+
+            :param tf.Tensor weights: representing the model's weights
+            :return: tf.Tensor loss_value: current loss value, tf.Tensor grads: gradients w.r.t. the weights
+            """
+            loss_value, grads = train_step(weights)
 
         # print out iteration & loss
         f.iter += 1
